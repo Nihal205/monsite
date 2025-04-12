@@ -1,5 +1,4 @@
 from django.contrib import admin
-from django.contrib import admin
 from .models import Cheval, Cavalier, Moniteur, Cours, Participation, Inscription
 from django.db.models import Count, Case, When, IntegerField
 from datetime import date
