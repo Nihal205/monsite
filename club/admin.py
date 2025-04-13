@@ -3,6 +3,7 @@ from django.db.models import Count, Case, When, IntegerField
 from django.urls import path
 from django.template.response import TemplateResponse
 from datetime import date
+
 from .models import Cheval, Cavalier, Moniteur, Cours, Participation, Inscription
 
 # === Admin Cavalier ===
@@ -10,7 +11,6 @@ class CavalierAdmin(admin.ModelAdmin):
     list_display = ["prenom", "nom", "est_inscrit_quelque_part"]
     search_fields = ["prenom", "nom"]
 
-    # Vérifie si le cavalier est inscrit à un cours
     def est_inscrit_quelque_part(self, obj):
         participations = Participation.objects.filter(cavalier=obj)
         return "✅ Oui" if participations.exists() else "❌ Non"
@@ -20,24 +20,25 @@ class CavalierAdmin(admin.ModelAdmin):
 class ChevalAdmin(admin.ModelAdmin):
     search_fields = ["nom"]
 
-# === Inline des participations dans le formulaire Cours ===
+# === Inline pour les participations ===
 class ParticipationInline(admin.TabularInline):
     model = Participation
     extra = 1
     autocomplete_fields = ["cavalier", "cheval"]
+    can_delete = True
+    min_num = 0
+    validate_min = False
+    validate_max = True
 
-    # Personnalise les listes déroulantes pour filtrer les cavaliers et chevaux
     def formfield_for_foreignkey(self, db_field, request=None, **kwargs):
         today = date.today()
         jour_str = today.strftime('%A').lower()
 
-        # 🐴 Empêche de sélectionner les chevaux déjà montés 2 fois aujourd'hui
         if db_field.name == "cheval":
             chevaux_exclus_jour = Participation.objects.filter(
                 cours__jour=jour_str
             ).values('cheval').annotate(n=Count('id')).filter(n__gte=2).values_list('cheval', flat=True)
 
-            # 🐴 Empêche aussi de prendre le même cheval 2 fois dans le même cours
             cours_id = request.resolver_match.kwargs.get('object_id')
             chevaux_deja_utilises = []
             if cours_id:
@@ -49,9 +50,6 @@ class ParticipationInline(admin.TabularInline):
                 id__in=list(chevaux_exclus_jour) + list(chevaux_deja_utilises)
             )
 
-        # 🧍 Trie les cavaliers :
-        #  - exclut ceux ayant dépassé 4 cours
-        #  - affiche les non inscrits d'abord
         if db_field.name == "cavalier":
             cavaliers_limite = Participation.objects.values('cavalier') \
                 .annotate(n=Count('id')) \
@@ -69,24 +67,36 @@ class ParticipationInline(admin.TabularInline):
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-# === Admin personnalisé pour les Cours ===
+# === Admin Cours personnalisé ===
 class CoursAdmin(admin.ModelAdmin):
     inlines = [ParticipationInline]
     list_display = ["niveau", "jour", "heure_debut", "heure_fin", "entraineur"]
 
-    # Affiche la spécialité des moniteurs dans le menu déroulant
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "entraineur":
             kwargs["queryset"] = Moniteur.objects.all()
             return db_field.formfield(**kwargs)
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-    # Message de succès lors de la sauvegarde d’un cours
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         messages.success(request, f"✅ Le cours '{obj}' a été enregistré avec succès.")
 
-# === Admin personnalisé avec une page de rapport ===
+    def save_formset(self, request, form, formset, change):
+        instances = formset.save(commit=False)
+        for instance in instances:
+            if hasattr(instance, "is_empty") and instance.is_empty():
+                continue
+            instance.full_clean()
+            instance.save()
+        formset.save_m2m()
+
+# === Ajout d'une méthode pour ignorer les lignes vides ===
+def participation_is_empty(self):
+    return not self.cavalier_id and not self.cheval_id
+Participation.is_empty = participation_is_empty
+
+# === Admin personnalisé avec page de rapport (optionnel) ===
 class CustomAdminSite(admin.AdminSite):
     site_header = "Administration Centre Équestre"
 
@@ -97,7 +107,6 @@ class CustomAdminSite(admin.AdminSite):
         ]
         return custom_urls + urls
 
-    # Page de rapport personnalisé pour voir tous les cours
     def rapport_view(self, request):
         cours = Cours.objects.prefetch_related("participations__cavalier", "participations__cheval", "entraineur")
         context = dict(
@@ -106,18 +115,7 @@ class CustomAdminSite(admin.AdminSite):
         )
         return TemplateResponse(request, "admin/club/rapport.html", context)
 
-# === Enregistrement des modèles dans Django Admin ===
-
-# Interface personnalisée
-admin_site = CustomAdminSite(name='customadmin')
-admin_site.register(Cavalier, CavalierAdmin)
-admin_site.register(Cheval, ChevalAdmin)
-admin_site.register(Moniteur)
-admin_site.register(Cours, CoursAdmin)
-admin_site.register(Participation)
-admin_site.register(Inscription)
-
-# Interface classique (si tu accèdes à /admin/)
+# === Enregistrement dans admin Django ===
 admin.site.register(Cavalier, CavalierAdmin)
 admin.site.register(Cheval, ChevalAdmin)
 admin.site.register(Moniteur)
