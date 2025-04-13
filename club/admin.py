@@ -23,47 +23,30 @@ class ChevalAdmin(admin.ModelAdmin):
 # === Inline pour les participations ===
 class ParticipationInline(admin.TabularInline):
     model = Participation
-    extra = 0  # ✅ Plus de ligne vide automatiquement
+    extra = 0  # pas de ligne vide automatique
     autocomplete_fields = ["cavalier", "cheval"]
-    can_delete = True
-    min_num = 0
-    validate_min = False
-    validate_max = True
 
     def formfield_for_foreignkey(self, db_field, request=None, **kwargs):
+        from django.db.models import Q
         today = date.today()
         jour_str = today.strftime('%A').lower()
+
+        # On récupère l'ID du cours en cours de modification
+        cours_id = request.resolver_match.kwargs.get('object_id')
 
         if db_field.name == "cheval":
             chevaux_exclus_jour = Participation.objects.filter(
                 cours__jour=jour_str
             ).values('cheval').annotate(n=Count('id')).filter(n__gte=2).values_list('cheval', flat=True)
 
-            cours_id = request.resolver_match.kwargs.get('object_id')
-            chevaux_deja_utilises = []
-            if cours_id:
-                chevaux_deja_utilises = Participation.objects.filter(
-                    cours__id=cours_id
-                ).values_list('cheval', flat=True)
+            chevaux_deja_utilises = Participation.objects.filter(
+                cours_id=cours_id
+            ).values_list('cheval', flat=True) if cours_id else []
 
-            kwargs["queryset"] = Cheval.objects.exclude(
-                id__in=list(chevaux_exclus_jour) + list(chevaux_deja_utilises)
+            # 👇 Inclure aussi les chevaux déjà sélectionnés (sinon ils disparaissent)
+            kwargs["queryset"] = Cheval.objects.filter(
+                Q(id__in=chevaux_deja_utilises) | ~Q(id__in=chevaux_exclus_jour)
             )
-
-        if db_field.name == "cavalier":
-            cavaliers_limite = Participation.objects.values('cavalier') \
-                .annotate(n=Count('id')) \
-                .filter(n__gte=4).values_list('cavalier', flat=True)
-
-            inscrits_ids = Participation.objects.values_list('cavalier', flat=True).distinct()
-
-            kwargs["queryset"] = Cavalier.objects.exclude(id__in=cavaliers_limite).annotate(
-                inscrit=Case(
-                    When(id__in=inscrits_ids, then=1),
-                    default=0,
-                    output_field=IntegerField()
-                )
-            ).order_by('inscrit', 'nom')
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
