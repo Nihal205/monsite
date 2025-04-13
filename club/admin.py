@@ -49,7 +49,7 @@ class ParticipationInline(admin.TabularInline):
                 id__in=list(chevaux_exclus_jour) + list(chevaux_deja_utilises)
             )
 
-        # �� Trie les cavaliers :
+        # 🧍 Trie les cavaliers :
         #  - exclut ceux ayant dépassé 4 cours
         #  - affiche les non inscrits d'abord
         if db_field.name == "cavalier":
@@ -124,4 +124,3 @@ admin.site.register(Moniteur)
 admin.site.register(Cours, CoursAdmin)
 admin.site.register(Participation)
 admin.site.register(Inscription)
-
