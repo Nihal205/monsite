@@ -63,8 +63,7 @@ class CoursAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
-        messages.success(request, f"✅ Le cours '{obj}' a été enregistré avec succès.")
-
+        
     def save_formset(self, request, form, formset, change):
         instances = formset.save(commit=False)
         for instance in instances:
