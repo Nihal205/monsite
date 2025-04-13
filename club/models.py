@@ -71,7 +71,11 @@ class Participation(models.Model):
         return not self.cavalier_id and not self.cheval_id
 
     def clean(self):
-        # 1️⃣ Cheval déjà dans le même cours ?
+    #  Ignore les participations incomplètes
+        if not self.cheval_id or not self.cavalier_id:
+         return
+
+        #  Cheval déjà dans le même cours ?
         conflit_cours = Participation.objects.filter(
             cheval=self.cheval,
             cours=self.cours
@@ -79,7 +83,7 @@ class Participation(models.Model):
         if conflit_cours.exists():
             raise ValidationError(f"{self.cheval.nom} est déjà monté pendant ce créneau.")
 
-        # 2️⃣ Cheval utilisé plus de 2 fois le même jour ?
+        # Cheval utilisé plus de 2 fois le même jour ?
         total_jour = Participation.objects.filter(
             cheval=self.cheval,
             cours__jour=self.cours.jour
@@ -87,14 +91,14 @@ class Participation(models.Model):
         if total_jour >= 2:
             raise ValidationError(f"{self.cheval.nom} est déjà monté 2 fois ce jour-là.")
 
-        # 3️⃣ Cavalier a dépassé 4 cours dans la semaine ?
+        #  Cavalier a dépassé 4 cours dans la semaine ?
         total_semaine = Participation.objects.filter(
             cavalier=self.cavalier
         ).exclude(pk=self.pk).count()
         if total_semaine >= 4:
             raise ValidationError(f"{self.cavalier.prenom} {self.cavalier.nom} a déjà atteint 4 cours cette semaine.")
 
-        # 4️⃣ Cavalier en cours débutant ne peut pas faire concours
+        # Cavalier en cours débutant ne peut pas faire concours
         if self.cours.niveau.lower() == "concours":
             debutant = Participation.objects.filter(
                 cavalier=self.cavalier,
@@ -103,7 +107,7 @@ class Participation(models.Model):
             if debutant.exists():
                 raise ValidationError("Ce cavalier suit un cours Débutant et ne peut pas participer à un Concours.")
 
-        # 5️⃣ Cheval de moins de 6 ans ?
+        # Cheval de moins de 6 ans ?
         if self.cheval.age < 6:
             if self.cours.niveau.lower() == "concours":
                 raise ValidationError(f"{self.cheval.nom} a moins de 6 ans et ne peut pas faire de concours.")

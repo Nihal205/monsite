@@ -23,7 +23,7 @@ class ChevalAdmin(admin.ModelAdmin):
 # === Inline pour les participations ===
 class ParticipationInline(admin.TabularInline):
     model = Participation
-    extra = 1
+    extra = 0  # ✅ Plus de ligne vide automatiquement
     autocomplete_fields = ["cavalier", "cheval"]
     can_delete = True
     min_num = 0
