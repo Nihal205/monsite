@@ -1,4 +1,3 @@
-
 import csv
 from django.core.management.base import BaseCommand
 from club.models import Cavalier
@@ -29,4 +28,3 @@ class Command(BaseCommand):
             self.stdout.write(self.style.ERROR(f"Fichier non trouvé : {csv_path}"))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Erreur : {e}"))
-

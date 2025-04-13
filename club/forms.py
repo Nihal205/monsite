@@ -10,3 +10,4 @@ class CoursForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         # ✅ C'est ici qu'on personnalise l'affichage de l'entraineur
         self.fields['entraineur'].label_from_instance = lambda obj: f"{obj.prenom} {obj.nom} ({obj.specialite})"
+

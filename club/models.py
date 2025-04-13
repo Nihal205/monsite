@@ -1,20 +1,22 @@
 from django.db import models
 from django.core.exceptions import ValidationError
-from django.db.models import Count
-from datetime import date
+from django.utils import timezone
 
-
+# === CHEVAL ===
 class Cheval(models.Model):
     nom = models.CharField(max_length=100)
     race = models.CharField(max_length=100)
     age = models.IntegerField()
     disponible = models.BooleanField(default=True)
     seances_travail = models.IntegerField(default=0)
+    # Champ temporaire pour forcer une migration
+    test_champ = models.BooleanField(default=False)
 
     def __str__(self):
         return self.nom
 
 
+# === CAVALIER ===
 class Cavalier(models.Model):
     nom = models.CharField(max_length=100)
     prenom = models.CharField(max_length=100)
@@ -26,6 +28,7 @@ class Cavalier(models.Model):
         return f"{self.prenom} {self.nom}"
 
 
+# === MONITEUR ===
 class Moniteur(models.Model):
     nom = models.CharField(max_length=100)
     prenom = models.CharField(max_length=100)
@@ -33,9 +36,10 @@ class Moniteur(models.Model):
     specialite = models.CharField(max_length=100)
 
     def __str__(self):
-        return f"{self.prenom} {self.nom}"
+        return f"{self.prenom} {self.nom} ({self.specialite})"
 
 
+# === COURS ===
 class Cours(models.Model):
     JOUR_CHOICES = [
         ('lundi', 'Lundi'),
@@ -59,87 +63,57 @@ class Cours(models.Model):
         ordering = ['jour', 'heure_debut']
 
 
+# === PARTICIPATION ===
 class Participation(models.Model):
     cours = models.ForeignKey(Cours, on_delete=models.CASCADE, related_name="participations")
     cavalier = models.ForeignKey(Cavalier, on_delete=models.CASCADE)
     cheval = models.ForeignKey(Cheval, on_delete=models.CASCADE)
 
     def clean(self):
-        if not self.cours_id:
-            return  # Ne pas exécuter les règles si le cours n’est pas encore sauvegardé
-
-        # 1️⃣ Même cheval déjà utilisé dans CE cours
-        doublon_cheval = Participation.objects.filter(
-            cours=self.cours,
-            cheval=self.cheval
-        ).exclude(pk=self.pk)
-        if doublon_cheval.exists():
-            raise ValidationError(f"{self.cheval.nom} est déjà monté dans ce cours par un autre cavalier.")
-
-        # 2️⃣ Même cheval dans un autre cours avec horaires qui se chevauchent
-        chevauchement = Participation.objects.filter(
+        # 1️⃣ Le même cheval ne peut pas être monté plusieurs fois dans un même cours
+        conflits_cheval = Participation.objects.filter(
             cheval=self.cheval,
-            cours__jour=self.cours.jour,
-            cours__heure_debut__lt=self.cours.heure_fin,
-            cours__heure_fin__gt=self.cours.heure_debut
-        ).exclude(pk=self.pk, cours_id=self.cours.id)
-        if chevauchement.exists():
-            raise ValidationError(f"{self.cheval.nom} est déjà prévu dans un autre cours à ce créneau.")
-
-        # 3️⃣ Cheval utilisé + de 2 fois dans la journée
-        nb_utilisations = Participation.objects.filter(
-            cheval=self.cheval,
-            cours__jour=self.cours.jour
-        ).exclude(pk=self.pk).count()
-        if nb_utilisations >= 2:
-            raise ValidationError(f"{self.cheval.nom} a déjà été monté 2 fois ce jour-là.")
-
-        # 4️⃣ Cavalier monte + de 2 chevaux dans la même journée
-        chevauchements = Participation.objects.filter(
-            cavalier=self.cavalier,
-            cours__jour=self.cours.jour
-        ).exclude(pk=self.pk)
-        if chevauchements.count() >= 2:
-            raise ValidationError(f"{self.cavalier.prenom} {self.cavalier.nom} monte déjà 2 chevaux ce jour-là.")
-
-        # 5️⃣ Maximum 5 cavaliers par cours
-        nb_participants = Participation.objects.filter(
             cours=self.cours
+        ).exclude(pk=self.pk)
+        if conflits_cheval.exists():
+            raise ValidationError(f"{self.cheval.nom} est déjà monté pendant ce créneau.")
+
+        # 2️⃣ Cheval ne peut pas être monté + de 2 fois dans la journée
+        count_today = Participation.objects.filter(
+            cheval=self.cheval,
+            cours__jour=self.cours.jour
         ).exclude(pk=self.pk).count()
-        if nb_participants >= 5:
-            raise ValidationError("Ce cours contient déjà 5 cavaliers.")
+        if count_today >= 2:
+            raise ValidationError(f"{self.cheval.nom} est déjà monté 2 fois ce jour-là.")
 
-        # 6️⃣ Cheval < 6 ans → interdit concours, moniteur obligatoire
-        if self.cheval.age < 6:
-            if self.cours.niveau.lower() == "concours":
-                raise ValidationError(f"{self.cheval.nom} a moins de 6 ans et ne peut pas participer à un concours.")
-            if not Moniteur.objects.filter(nom=self.cavalier.nom, prenom=self.cavalier.prenom).exists():
-                raise ValidationError(f"{self.cheval.nom} a moins de 6 ans et doit être monté par un moniteur.")
+        # 3️⃣ Le cavalier ne peut pas faire plus de 4 cours par semaine
+        semaine = Participation.objects.filter(
+            cavalier=self.cavalier
+        ).exclude(pk=self.pk).count()
+        if semaine >= 4:
+            raise ValidationError(f"{self.cavalier.prenom} {self.cavalier.nom} a déjà atteint 4 cours cette semaine.")
 
-        # 7️⃣ Cavalier inscrit à un cours Débutant → pas de concours
+        # 4️⃣ Cavalier inscrit à "Débutant" ne peut pas participer à un cours "Concours"
         if self.cours.niveau.lower() == "concours":
             debutant = Participation.objects.filter(
                 cavalier=self.cavalier,
                 cours__niveau__iexact="débutant"
             ).exclude(pk=self.pk)
             if debutant.exists():
-                raise ValidationError(
-                    f"{self.cavalier.prenom} {self.cavalier.nom} suit un cours Débutant et ne peut pas faire de concours."
-                )
+                raise ValidationError("Ce cavalier suit un cours Débutant et ne peut pas participer à un Concours.")
 
-        # 8️⃣ Cavalier ne doit pas dépasser 4 cours dans la semaine
-        semaine = Participation.objects.filter(
-            cavalier=self.cavalier
-        ).exclude(pk=self.pk).count()
-        if semaine >= 4:
-            raise ValidationError(
-                f"{self.cavalier.prenom} {self.cavalier.nom} ne peut pas participer à plus de 4 cours par semaine."
-            )
+        # 5️⃣ Cheval < 6 ans → pas concours & monté seulement par un moniteur
+        if self.cheval.age < 6:
+            if self.cours.niveau.lower() == "concours":
+                raise ValidationError(f"{self.cheval.nom} a moins de 6 ans et ne peut pas faire de concours.")
+            if not Moniteur.objects.filter(nom=self.cavalier.nom, prenom=self.cavalier.prenom).exists():
+                raise ValidationError(f"{self.cheval.nom} a moins de 6 ans et ne peut être monté que par un moniteur.")
 
     def __str__(self):
         return f"{self.cavalier} monte {self.cheval} dans {self.cours}"
 
 
+# === INSCRIPTION ===
 class Inscription(models.Model):
     cavalier = models.ForeignKey(Cavalier, on_delete=models.CASCADE)
     cours = models.ForeignKey(Cours, on_delete=models.CASCADE)
