@@ -1,5 +1,7 @@
 from django.db import models
 from django.core.exceptions import ValidationError
+from django.db.models import Count
+from django.utils import timezone
 
 # === CHEVAL ===
 class Cheval(models.Model):
@@ -8,6 +10,16 @@ class Cheval(models.Model):
     age = models.IntegerField()
     disponible = models.BooleanField(default=True)
     seances_travail = models.IntegerField(default=0)
+
+    def update_disponibilite(self):
+        from .models import Participation
+        semaine = Participation.objects.filter(
+            cheval=self,
+            cours__jour__in=['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi']
+        ).count()
+        self.seances_travail = semaine
+        self.disponible = semaine <= 8
+        self.save()
 
     def __str__(self):
         return self.nom
@@ -20,6 +32,9 @@ class Cavalier(models.Model):
     age = models.IntegerField()
     email = models.EmailField()
     cheval_possede = models.ForeignKey(Cheval, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def nb_cours(self):
+        return self.participation_set.count()
 
     def __str__(self):
         return f"{self.prenom} {self.nom}"
@@ -66,16 +81,8 @@ class Participation(models.Model):
     cavalier = models.ForeignKey(Cavalier, on_delete=models.CASCADE)
     cheval = models.ForeignKey(Cheval, on_delete=models.CASCADE)
 
-    def is_empty(self):
-        """Ignore les lignes vides dans le formulaire admin"""
-        return not self.cavalier_id and not self.cheval_id
-
     def clean(self):
-    #  Ignore les participations incomplètes
-        if not self.cheval_id or not self.cavalier_id:
-         return
-
-        #  Cheval déjà dans le même cours ?
+        # 🐴 Cheval déjà utilisé dans ce cours ?
         conflit_cours = Participation.objects.filter(
             cheval=self.cheval,
             cours=self.cours
@@ -83,7 +90,7 @@ class Participation(models.Model):
         if conflit_cours.exists():
             raise ValidationError(f"{self.cheval.nom} est déjà monté pendant ce créneau.")
 
-        # Cheval utilisé plus de 2 fois le même jour ?
+        # 🐴 Cheval monté + de 2 fois ce jour-là ?
         total_jour = Participation.objects.filter(
             cheval=self.cheval,
             cours__jour=self.cours.jour
@@ -91,14 +98,14 @@ class Participation(models.Model):
         if total_jour >= 2:
             raise ValidationError(f"{self.cheval.nom} est déjà monté 2 fois ce jour-là.")
 
-        #  Cavalier a dépassé 4 cours dans la semaine ?
+        # 🧍‍♂️ Cavalier dans + de 4 cours cette semaine ?
         total_semaine = Participation.objects.filter(
             cavalier=self.cavalier
         ).exclude(pk=self.pk).count()
         if total_semaine >= 4:
             raise ValidationError(f"{self.cavalier.prenom} {self.cavalier.nom} a déjà atteint 4 cours cette semaine.")
 
-        # Cavalier en cours débutant ne peut pas faire concours
+        # 🧍 Débutant ne peut pas aller en concours
         if self.cours.niveau.lower() == "concours":
             debutant = Participation.objects.filter(
                 cavalier=self.cavalier,
@@ -107,15 +114,16 @@ class Participation(models.Model):
             if debutant.exists():
                 raise ValidationError("Ce cavalier suit un cours Débutant et ne peut pas participer à un Concours.")
 
-        # Cheval de moins de 6 ans ?
+        # 🐴 Cheval < 6 ans → pas concours, doit être monté par moniteur
         if self.cheval.age < 6:
             if self.cours.niveau.lower() == "concours":
                 raise ValidationError(f"{self.cheval.nom} a moins de 6 ans et ne peut pas faire de concours.")
-            if not Moniteur.objects.filter(
-                nom=self.cavalier.nom,
-                prenom=self.cavalier.prenom
-            ).exists():
+            if not Moniteur.objects.filter(nom=self.cavalier.nom, prenom=self.cavalier.prenom).exists():
                 raise ValidationError(f"{self.cheval.nom} a moins de 6 ans et ne peut être monté que par un moniteur.")
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.cheval.update_disponibilite()
 
     def __str__(self):
         return f"{self.cavalier} monte {self.cheval} dans {self.cours}"
@@ -129,4 +137,3 @@ class Inscription(models.Model):
 
     def __str__(self):
         return f"{self.cavalier} inscrit à {self.cours}"
-
