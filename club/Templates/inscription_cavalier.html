@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h2>Inscription à un cours</h2>
+
+  {% if messages %}
+    <ul class="messages">
+      {% for message in messages %}
+        <li {% if message.tags %} class="{{ message.tags }}" {% endif %}>{{ message }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <form method="post">
+    {% csrf_token %}
+
+    <label for="cours">Cours :</label>
+    <select name="cours_id" required>
+      {% for cours in cours_disponibles %}
+        <option value="{{ cours.id }}">{{ cours }}</option>
+      {% endfor %}
+    </select><br><br>
+
+    <label for="cheval">Cheval :</label>
+    <select name="cheval_id" required>
+      {% for cheval in chevaux_disponibles %}
+        <option value="{{ cheval.id }}">{{ cheval.nom }}</option>
+      {% endfor %}
+    </select><br><br>
+
+    <button type="submit">S'inscrire</button>
+  </form>
+{% endblock %}
