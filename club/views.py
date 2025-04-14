@@ -4,6 +4,8 @@ from .models import Cours, Cheval, Cavalier, Participation
 from django.contrib.auth.decorators import login_required
 from django.utils.timezone import now
 from datetime import timedelta
+from django.db.models import Count
+
 
 @login_required
 def inscription_cavalier(request):
