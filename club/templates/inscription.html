@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Inscription à un cours</title>
+</head>
+<body>
+    <h1>📅 S'inscrire à un cours</h1>
+
+    {% if message %}
+        <p><strong>{{ message }}</strong></p>
+    {% endif %}
+
+    {% if cours_dispo %}
+        <ul>
+        {% for cours in cours_dispo %}
+            <li>
+                {{ cours.niveau }} – {{ cours.jour }} à {{ cours.heure_debut }}
+                avec {{ cours.entraineur.prenom }} {{ cours.entraineur.nom }}
+                <form method="post" action="">
+                    {% csrf_token %}
+                    <input type="hidden" name="cours_id" value="{{ cours.id }}">
+                    <button type="submit">S'inscrire</button>
+                </form>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Aucun cours disponible ou tu es déjà inscrit à 3 cours.</p>
+    {% endif %}
+
+    <a href="{% url 'dashboard' %}">← Retour au tableau de bord</a>
+</body>
+</html>

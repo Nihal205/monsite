@@ -1,25 +1,23 @@
 from django.contrib import admin
-from django.db.models import Count, Case, When, IntegerField
 from .models import Cheval, Cavalier, Moniteur, Cours, Participation, Inscription
+from django.db.models import Count, Case, When, IntegerField
 from datetime import date
 
 # === Admin Cavalier ===
 class CavalierAdmin(admin.ModelAdmin):
-    list_display = ["prenom", "nom", "email", "nb_cours"]
+    list_display = ["prenom", "nom", "est_inscrit_quelque_part"]
     search_fields = ["prenom", "nom"]
 
-    def nb_cours(self, obj):
-        return obj.nb_cours()
-    nb_cours.short_description = "Nombre de cours"
-
+    def est_inscrit_quelque_part(self, obj):
+        participations = Participation.objects.filter(cavalier=obj)
+        return "✅ Oui" if participations.exists() else "❌ Non"
+    est_inscrit_quelque_part.short_description = "Inscrit à un cours ?"
 
 # === Admin Cheval ===
 class ChevalAdmin(admin.ModelAdmin):
-    list_display = ["nom", "race", "age", "seances_travail", "disponible"]
     search_fields = ["nom"]
 
-
-# === Inline Participation dans Cours ===
+# === Inline Participation personnalisé ===
 class ParticipationInline(admin.TabularInline):
     model = Participation
     extra = 1
@@ -30,15 +28,30 @@ class ParticipationInline(admin.TabularInline):
         jour_str = today.strftime('%A').lower()
 
         if db_field.name == "cheval":
-            chevaux_exclus = Participation.objects.filter(
+            # 🐴 Chevaux déjà montés 2 fois dans la journée
+            chevaux_exclus_jour = Participation.objects.filter(
                 cours__jour=jour_str
             ).values('cheval').annotate(n=Count('id')).filter(n__gte=2).values_list('cheval', flat=True)
-            kwargs["queryset"] = Cheval.objects.exclude(id__in=chevaux_exclus)
+
+            # 🐴 Chevaux déjà utilisés dans le cours courant (pas 2 cavaliers sur le même cheval dans un cours)
+            cours_id = request.resolver_match.kwargs.get('object_id')
+            chevaux_deja_utilises = []
+            if cours_id:
+                chevaux_deja_utilises = Participation.objects.filter(
+                    cours__id=cours_id
+                ).values_list('cheval', flat=True)
+
+            kwargs["queryset"] = Cheval.objects.exclude(
+                id__in=list(chevaux_exclus_jour) + list(chevaux_deja_utilises)
+            )
 
         if db_field.name == "cavalier":
+            # 🧍 Cavaliers ayant dépassé 4 cours cette semaine
             cavaliers_limite = Participation.objects.values('cavalier') \
                 .annotate(n=Count('id')) \
                 .filter(n__gte=4).values_list('cavalier', flat=True)
+
+            # 🧍 Cavaliers non encore inscrits
             inscrits_ids = Participation.objects.values_list('cavalier', flat=True).distinct()
 
             kwargs["queryset"] = Cavalier.objects.exclude(id__in=cavaliers_limite).annotate(
@@ -51,8 +64,7 @@ class ParticipationInline(admin.TabularInline):
 
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-
-# === Admin Cours ===
+# === Admin Cours personnalisé ===
 class CoursAdmin(admin.ModelAdmin):
     inlines = [ParticipationInline]
     list_display = ["niveau", "jour", "heure_debut", "heure_fin", "entraineur"]
@@ -60,10 +72,10 @@ class CoursAdmin(admin.ModelAdmin):
     def formfield_for_foreignkey(self, db_field, request, **kwargs):
         if db_field.name == "entraineur":
             kwargs["queryset"] = Moniteur.objects.all()
+            kwargs["label_from_instance"] = lambda obj: f"{obj.prenom} {obj.nom} ({obj.specialite})"
         return super().formfield_for_foreignkey(db_field, request, **kwargs)
 
-
-# === Enregistrement dans admin ===
+# === Enregistrement dans l’admin ===
 admin.site.register(Cavalier, CavalierAdmin)
 admin.site.register(Cheval, ChevalAdmin)
 admin.site.register(Moniteur)

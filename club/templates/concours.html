@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Concours</title>
+</head>
+<body>
+    <h1>🏆 Concours disponibles</h1>
+
+    {% if message %}
+        <p><strong>{{ message }}</strong></p>
+    {% endif %}
+
+    {% if concours %}
+        <ul>
+        {% for c in concours %}
+            <li>
+                {{ c.jour }} à {{ c.heure_debut }} avec {{ c.entraineur.prenom }} {{ c.entraineur.nom }}
+                <br>
+                Niveau : {{ c.niveau }} | Participants : {{ c.participations.count }}/5
+                <form method="post">
+                    {% csrf_token %}
+                    <input type="hidden" name="cours_id" value="{{ c.id }}">
+                    <button type="submit">S’inscrire au concours</button>
+                </form>
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Aucun concours disponible pour le moment.</p>
+    {% endif %}
+
+    <a href="{% url 'dashboard' %}">← Retour au tableau de bord</a>
+</body>
+</html>

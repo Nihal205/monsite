@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Fiche des chevaux</title>
+</head>
+<body>
+    <h1>🐴 Fiche des chevaux</h1>
+
+    {% if chevaux %}
+        <ul>
+        {% for cheval in chevaux %}
+            <li>
+                <strong>{{ cheval.nom }}</strong> ({{ cheval.race }}) – {{ cheval.age }} ans <br>
+                📅 Séances de travail : {{ cheval.seances_travail }} <br>
+                {% if cheval.disponible %}
+                    ✅ Disponible
+                {% else %}
+                    ❌ Indisponible
+                {% endif %}
+            </li>
+            <hr>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Aucun cheval trouvé.</p>
+    {% endif %}
+
+    <a href="{% url 'dashboard' %}">← Retour au tableau de bord</a>
+</body>
+</html>

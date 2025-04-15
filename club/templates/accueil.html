@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Club d'Équitation</title>
+</head>
+<body>
+    <h1>Bienvenue au Club d'Équitation ! 🐎</h1>
+    <p>Ce site vous permet de consulter les cours, chevaux, et concours du club.</p>
+
+    {% if not user.is_authenticated %}
+        <a href="{% url 'login' %}">
+            <button>Se connecter</button>
+        </a>
+    {% endif %}
+</body>
+</html>

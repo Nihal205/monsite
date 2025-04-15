@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Tableau de bord</title>
+</head>
+<body>
+    <h1>Bienvenue sur ton espace personnel !</h1>
+
+    <div>
+        <a href="{% url 'statut' %}">
+            <button>🧾 Voir mon statut</button>
+        </a>
+    </div>
+
+    <div>
+        <a href="{% url 'inscription' %}">
+            <button>📅 M’inscrire à un cours</button>
+        </a>
+    </div>
+
+    <div>
+        <a href="{% url 'concours' %}">
+            <button>🏆 Voir les concours</button>
+        </a>
+    </div>
+
+    <div>
+        <a href="{% url 'chevaux' %}">
+            <button>🐴 Voir les fiches chevaux</button>
+        </a>
+    </div>
+
+    <form method="post" action="{% url 'logout' %}">
+        {% csrf_token %}
+        <button type="submit">Se déconnecter</button>
+    </form>
+</body>
+</html>

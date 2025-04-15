@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Mon Statut</title>
+</head>
+<body>
+    <h1>📅 Mes cours de la semaine</h1>
+
+    {% if participations %}
+        <ul>
+        {% for p in participations %}
+            <li>
+                {{ p.cours.niveau }} – {{ p.cours.jour }} à {{ p.cours.heure_debut }}
+                <br>
+                🐴 Cheval : {{ p.cheval.nom }}<br>
+                👨‍🏫 Moniteur : {{ p.cours.entraineur.prenom }} {{ p.cours.entraineur.nom }}
+            </li>
+        {% endfor %}
+        </ul>
+    {% else %}
+        <p>Tu n'es inscrit à aucun cours cette semaine.</p>
+    {% endif %}
+
+    <a href="{% url 'dashboard' %}">← Retour au tableau de bord</a>
+</body>
+</html>

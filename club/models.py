@@ -2,6 +2,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.db.models import Count
 from django.utils import timezone
+from django.contrib.auth.models import User
 
 # === CHEVAL ===
 class Cheval(models.Model):
@@ -27,6 +28,7 @@ class Cheval(models.Model):
 
 # === CAVALIER ===
 class Cavalier(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, null=True, blank=True)
     nom = models.CharField(max_length=100)
     prenom = models.CharField(max_length=100)
     age = models.IntegerField()
