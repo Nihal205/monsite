@@ -1,16 +1,19 @@
-from django.shortcuts import render
+from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
+from django.contrib import messages
 from .models import Cavalier, Participation, Cheval, Cours
+from django.utils.timezone import now
+from datetime import timedelta
+from django.db.models import Count
+
 
 def accueil(request):
     return render(request, 'accueil.html')
 
 
-
 @login_required
 def dashboard(request):
     user = request.user
-
     try:
         cavalier = Cavalier.objects.get(user=user)
         participations = Participation.objects.filter(cavalier=cavalier)
@@ -22,6 +25,7 @@ def dashboard(request):
         'cavalier': cavalier,
         'participations': participations,
     })
+
 
 @login_required
 def statut(request):
@@ -35,6 +39,7 @@ def statut(request):
         'participations': participations
     })
 
+
 @login_required
 def inscription(request):
     message = ""
@@ -43,15 +48,11 @@ def inscription(request):
         participations = Participation.objects.filter(cavalier=cavalier)
         nb_actuel = participations.count()
 
-        # Gestion de l’inscription
         if request.method == "POST" and nb_actuel < 3:
             cours_id = request.POST.get("cours_id")
             cours = Cours.objects.get(id=cours_id)
-
-            # Vérifier qu’il n’est pas déjà inscrit à ce cours
             deja = Participation.objects.filter(cavalier=cavalier, cours=cours).exists()
             if not deja:
-                # Choisir automatiquement un cheval dispo
                 cheval_dispo = Cheval.objects.filter(disponible=True).first()
                 if cheval_dispo:
                     Participation.objects.create(cavalier=cavalier, cours=cours, cheval=cheval_dispo)
@@ -60,11 +61,7 @@ def inscription(request):
                     message = "Aucun cheval disponible 😥"
             else:
                 message = "Tu es déjà inscrit à ce cours."
-
-        # Récupérer tous les cours pas encore choisis par ce cavalier
         cours_dispo = Cours.objects.exclude(participations__cavalier=cavalier)
-
-        # Si déjà 3 cours → on bloque
         if nb_actuel >= 3:
             cours_dispo = []
 
@@ -77,18 +74,16 @@ def inscription(request):
         "message": message
     })
 
+
 @login_required
 def concours(request):
     message = ""
     try:
         cavalier = Cavalier.objects.get(user=request.user)
         concours = Cours.objects.filter(niveau__iexact="concours")
-
         if request.method == "POST":
             cours_id = request.POST.get("cours_id")
             cours = Cours.objects.get(id=cours_id)
-
-            # éviter la double inscription
             deja = Participation.objects.filter(cavalier=cavalier, cours=cours).exists()
             if not deja:
                 cheval_dispo = Cheval.objects.filter(disponible=True).first()
@@ -111,6 +106,7 @@ def concours(request):
         "message": message
     })
 
+
 @login_required
 def chevaux(request):
     chevaux = Cheval.objects.all()
@@ -118,3 +114,43 @@ def chevaux(request):
         "chevaux": chevaux
     })
 
+
+@login_required
+def inscription_cavalier(request):
+    cavalier = Cavalier.objects.get(email=request.user.email)
+    cours_disponibles = Cours.objects.annotate(nb=Count('participations')).filter(nb__lt=5)
+    today = now().strftime('%A').lower()
+    chevaux_disponibles = Cheval.objects.filter(
+        disponible=True
+    ).annotate(nb=Count('participation')).filter(nb__lt=2)
+
+    if request.method == "POST":
+        cours_id = request.POST.get("cours_id")
+        cheval_id = request.POST.get("cheval_id")
+
+        cours = Cours.objects.get(id=cours_id)
+        cheval = Cheval.objects.get(id=cheval_id)
+        semaine = now().date() - timedelta(days=7)
+        total = Participation.objects.filter(cavalier=cavalier, cours__jour__gte=semaine).count()
+
+        if total >= 4:
+            messages.error(request, "❌ Tu as atteint la limite de 4 cours par semaine.")
+            return redirect("inscription_cavalier")
+
+        if cours.participations.count() >= 5:
+            messages.error(request, "❌ Ce cours est déjà complet.")
+            return redirect("inscription_cavalier")
+
+        today_count = Participation.objects.filter(cheval=cheval, cours__jour=cours.jour).count()
+        if today_count >= 2:
+            messages.error(request, f"❌ {cheval.nom} est déjà monté 2 fois aujourd’hui.")
+            return redirect("inscription_cavalier")
+
+        Participation.objects.create(cavalier=cavalier, cheval=cheval, cours=cours)
+        messages.success(request, f"✅ Tu es inscrit à {cours} avec {cheval.nom} !")
+        return redirect("inscription_cavalier")
+
+    return render(request, "club/inscription_cavalier.html", {
+        "cours_disponibles": cours_disponibles,
+        "chevaux_disponibles": chevaux_disponibles
+    })
